@@ -26,8 +26,11 @@ DC = _compose_cmd()
 
 
 def sh(*args, env=None, check=True):
-    return subprocess.run(list(args), check=check, capture_output=True, text=True,
-                          env={**os.environ, **(env or {})}).stdout.strip()
+    r = subprocess.run(list(args), capture_output=True, text=True, env={**os.environ, **(env or {})})
+    if check and r.returncode != 0:
+        print(f"КОМАНДА УПАЛА ({r.returncode}): {' '.join(args)}\n--- stdout ---\n{r.stdout}\n--- stderr ---\n{r.stderr}", flush=True)
+        r.check_returncode()
+    return r.stdout.strip()
 
 
 def sha256(p):
@@ -91,6 +94,7 @@ def locust(env, users, seconds, prefix):
 
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
+    OUT.chmod(0o777)  # контейнер Locust работает от другого uid (на Linux-раннерах CI иначе нет прав записи)
     plan = build_plan()
     base = {"config_file": str(cfg_path), "config_sha256": sha256(cfg_path),
             "uv_lock_sha256": sha256("sut/uv.lock"), "seed": cfg["seed"],
