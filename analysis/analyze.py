@@ -167,6 +167,35 @@ for a_, met in zip(ax, ("norm_p95", "norm_rps")):
     a_.axhline(1, c="k", lw=.5); a_.set_xlabel("порядковый номер прогона"); a_.set_ylabel(met)
 fig.tight_layout(); fig.savefig(IMG / "stability.png", dpi=130); plt.close(fig)
 
+
+# ---------- чувствительность к выбросам ----------
+def holm(p):
+    o = np.argsort(p); m = len(p); adj = np.zeros(m); mx = 0
+    for k, i in enumerate(o):
+        mx = max(mx, min(1, (m - k) * p[i])); adj[i] = mx
+    return adj
+
+
+bad = main[(main.norm_p95 > 1.4) | (main.norm_rps < 0.7)]
+m2 = main.drop(bad.index); rs = []
+for (w, u), g in m2.groupby(["workload", "users"]):
+    for a, b in [("async_asyncpg", "sync_psycopg2"), ("async_psycopg3", "sync_psycopg2"), ("async_asyncpg", "async_psycopg3")]:
+        for met in ("rps", "p95"):
+            x, y = g[g.driver == a][met], g[g.driver == b][met]
+            rs.append(dict(workload=w, users=u, cmp=f"{a} vs {b}", metric=met, ratio=x.median() / y.median(),
+                           cliff_delta=cliff(x, y), p=stats.mannwhitneyu(x, y).pvalue))
+sens = pd.DataFrame(rs); sens["p_holm"] = holm(sens.p.values); sens.to_csv(PROC / "comparisons_no_outliers.csv", index=False)
+rcv = lambda x: (x.quantile(.75) - x.quantile(.25)) / 1.349 / x.median() * 100
+md.append("## Чувствительность к выбросам\n\nВыбросом считается прогон, у которого p95 более чем в 1,4 раза выше медианы своей "
+          "конфигурации или пропускная способность ниже 0,7 медианы (критерий задан после просмотра данных, используется только как проверка "
+          f"устойчивости). Исключено прогонов: {len(bad)}.\n\n" + table(bad[["order", "driver", "workload", "users", "p95", "rps", "norm_p95", "norm_rps"]], 2) +
+          f"\nЗначимых сравнений после Холма (p_holm<0.05): со всеми прогонами {(cmpdf.p_holm < .05).sum()} из {len(cmpdf)}, "
+          f"без выбросов {(sens.p_holm < .05).sum()} из {len(sens)}.\n")
+if len(aa) >= 4:
+    md.append(f"Робастный разброс A/A (IQR/1,349 к медиане): p95 = {rcv(aa.p95):.1f}%, rps = {rcv(aa.rps):.1f}%. "
+              f"CV без прогона с наибольшим p95: p95 = {aa[aa.p95 < aa.p95.max()].p95.std()/aa[aa.p95 < aa.p95.max()].p95.mean()*100:.1f}%, "
+              f"rps = {aa[aa.p95 < aa.p95.max()].rps.std()/aa[aa.p95 < aa.p95.max()].rps.mean()*100:.1f}%.\n")
+
 # ---------- графики ----------
 def box(metric, ylabel, fname):
     cfgs = sorted(main.groupby(["workload", "users"]).groups)
