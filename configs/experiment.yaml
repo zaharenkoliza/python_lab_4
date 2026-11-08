@@ -1,0 +1,20 @@
+# Основной эксперимент. Все параметры стенда задаются здесь, в коде ничего не захардкожено.
+name: async-drivers-fastapi
+seed: 20261108
+factors:
+  driver: [sync_psycopg2, async_asyncpg, async_psycopg3]
+  workload: [rows, slow]
+  users: [50, 200]
+repetitions: 8
+warmup_seconds: 10        # отдельный прогон, в анализ не идёт
+duration_seconds: 30
+randomize_order: true
+pool_size: 20
+load_cpus: 2              # лимит CPU контейнера генератора (как в docker-compose.yml)
+monitoring: false         # Prometheus/cAdvisor выключены на время замеров (не шумят), включаются в make smoke
+aa:                       # A/A: одна конфигурация, N повторов, в анализе делится случайно на 2 группы
+  driver: sync_psycopg2
+  workload: rows
+  users: 50
+  repetitions: 10
+out_dir: results/raw

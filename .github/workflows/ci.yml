@@ -1,0 +1,14 @@
+name: ci-experiment
+on: [push, workflow_dispatch]
+jobs:
+  experiment:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - run: uv sync --frozen
+      - run: docker compose build
+      - run: make smoke
+      - run: make ci
+      - uses: actions/upload-artifact@v4
+        with: {name: ci-results, path: results/ci}
